@@ -1,0 +1,116 @@
+---
+title: "Final Project WIP"
+format: 
+  dashboard:
+    embed-resources: true
+theme: lux
+---
+
+--- 
+title: "DASHBOARD TITLE"
+author: "YOUR NAME"
+format: 
+  dashboard:
+    logo: images/LOGO_IMAGE.png
+    nav-buttons: [github]
+    github: https://github.com/YOUR_URL
+theme: lux
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+# Load packages 
+if(!require(pacman)) install.packages("pacman")
+pacman::p_load(tidyverse, 
+               here,
+               sf,
+               bslib, 
+               bsicons,
+               rnaturalearth, 
+               plotly, 
+               countrycode, 
+               htmltools, 
+               reactable,
+               janitor,
+               shiny)
+
+
+
+
+
+seafood_consumption <- read_csv("data/fisfod_cons_pc.csv")
+seafood_consumption_meta <- read_csv("data/fisfod_cons_pc_meta.csv")
+
+seafood_consumption <- seafood_consumption %>% 
+  mutate(country = case_when(
+    country == "USA" ~ "United States",
+    country == "UK" ~ "United Kingdom",
+    country == "North Macedonia" ~ "Macedonia, FYR",
+    country == "UAE" ~ "United Arab Emirates",
+    country == "Eswatini" ~ "Zimbabwe",
+    TRUE ~ country
+  ))
+
+seafood <- seafood_consumption %>% 
+  left_join(seafood_consumption_meta, by = c("country" = "name")) %>% 
+  mutate(geo = case_when(
+    geo == "hkg" ~ "dsklfj",
+    TRUE ~ geo
+  ))
+
+world_shape <- rgeoboundaries::gb_adm0()
+
+setdiff(str_to_upper(seafood$geo), world_shape$shapeGroup)
+
+
+
+```
+
+
+
+
+
+
+
+
+# HOME 
+
+## ROW 1 {height=10%}
+
+```{r}
+plot(cars)
+```
+
+
+## ROW 2 {height=30%}
+
+```{r}
+plot(cars)
+```
+
+
+## ROW 3 {height=60%}
+
+```{r}
+plot(cars)
+```
+
+
+# DOWNLOAD DATA
+
+
+# ABOUT
+
+
+
+
+
+
+
+
+
+
+
