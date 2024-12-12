@@ -1,19 +1,12 @@
----
-title: "Final Project WIP"
-format: 
-  dashboard:
-    embed-resources: true
-theme: lux
----
-
 --- 
-title: "DASHBOARD TITLE"
-author: "YOUR NAME"
+title: "Seafood Consumption across the Globe"
+author: "by Joël Zöllig"
 format: 
   dashboard:
-    logo: images/LOGO_IMAGE.png
-    nav-buttons: [github]
-    github: https://github.com/YOUR_URL
+    logo: images/fish.png
+    #nav-buttons: [github]
+    #github: https://github.com/joeluzh
+    embed-resources: true
 theme: lux
 execute:
   echo: false
@@ -35,15 +28,17 @@ pacman::p_load(tidyverse,
                htmltools, 
                reactable,
                janitor,
-               shiny)
+               shiny,
+               RColorBrewer)
 
 
 
 
-
+# read in the data
 seafood_consumption <- read_csv("data/fisfod_cons_pc.csv")
 seafood_consumption_meta <- read_csv("data/fisfod_cons_pc_meta.csv")
 
+#initial data handling for joining the metadata. Abbreviations where present in one but not the other
 seafood_consumption <- seafood_consumption %>% 
   mutate(country = case_when(
     country == "USA" ~ "United States",
@@ -54,16 +49,95 @@ seafood_consumption <- seafood_consumption %>%
     TRUE ~ country
   ))
 
-seafood <- seafood_consumption %>% 
-  left_join(seafood_consumption_meta, by = c("country" = "name")) %>% 
-  mutate(geo = case_when(
-    geo == "hkg" ~ "dsklfj",
-    TRUE ~ geo
-  ))
+seafood <- seafood_consumption %>%
+  left_join(seafood_consumption_meta, by = c("country" = "name")) %>%
+  filter(geo != "hkg") %>%
+  mutate(geo = str_to_upper(geo))
 
-world_shape <- rgeoboundaries::gb_adm0()
+world_shape <- rnaturalearth::ne_countries(returnclass = "sf")
 
-setdiff(str_to_upper(seafood$geo), world_shape$shapeGroup)
+#setdiff(world_shape$adm0_a3, seafood$geo)
+#will appear as NA upon joining. As there are many island nations present in the dataset, but not the ne_countries set, they will be omitted
+
+seafood_world <- seafood %>%
+  pivot_longer(cols = matches("^\\d{4}$"), names_to = "year", values_to = "consumption") %>% 
+  right_join(world_shape, by = c("geo" = "adm0_a3")) %>%
+  st_as_sf() %>%
+  mutate(consumption = ifelse(is.na(consumption), NA, consumption))
+
+#calculation of the max/min/regional mean consumers of seafood in 2018
+seafood_consumption_max_2018 <- seafood_world %>%
+  select(country, year, consumption) %>%
+  filter(year == 2018) %>% 
+  arrange(desc(consumption)) %>% 
+  slice(1)
+
+seafood_consumption_min_2018 <- seafood_world %>%
+  select(country, year, consumption) %>%
+  filter(year == 2018) %>% 
+  arrange(consumption) %>% 
+  slice(1)
+
+seafood_consumption_regional_mean_2018 <- seafood_world %>% 
+  select(six_regions, year, consumption) %>%
+  st_drop_geometry() %>% 
+  group_by(six_regions) %>% 
+  filter(year == 2018) %>% 
+  drop_na(consumption) %>% 
+  summarise(mean_consumption = mean(consumption)) %>%
+  mutate(six_regions = recode(six_regions,
+                              "europe_central_asia" = "Europe and Central Asia",
+                              "america" = "America",
+                              "middle_east_north_africa" = "Middle East and North Africa",
+                              "sub_saharan_africa" = "Sub-Saharan Africa",
+                              "east_asia_pacific" = "East Asia and Pacific",
+                              "south_asia" = "South Asia"))
+
+change_in_consumption <- seafood_world %>% 
+  st_drop_geometry() %>% 
+  select(country, year, consumption) %>% 
+  filter(year == 2018 | year == 2017) %>% 
+  pivot_wider(names_from = year, values_from = consumption)
+
+
+decrease_in_seafood_consumption <- seafood %>% 
+  select(country, `2017`, `2018`, six_regions) %>% 
+  mutate(change_in_consumption = `2018` - `2017`) %>% 
+  arrange(change_in_consumption) %>% 
+  slice_head(n = 20)
+
+decrease_in_seafood_consumption <- decrease_in_seafood_consumption %>%
+  mutate(six_regions = recode(six_regions,
+                              "europe_central_asia" = "Europe and Central Asia",
+                              "america" = "America",
+                              "middle_east_north_africa" = "Middle East and North Africa",
+                              "sub_saharan_africa" = "Sub-Saharan Africa",
+                              "east_asia_pacific" = "East Asia and Pacific",
+                              "south_asia" = "South Asia")) %>% 
+  mutate(tooltip_label = paste(country, 
+                               round(change_in_consumption, 2), 
+                               sep = ": "))
+
+
+increase_in_seafood_consumption <- seafood %>% 
+  select(country, `2017`, `2018`, six_regions) %>% 
+  mutate(change_in_consumption = `2018` - `2017`) %>% 
+  arrange(desc(change_in_consumption)) %>% 
+  slice_head(n = 20)
+
+increase_in_seafood_consumption <- increase_in_seafood_consumption %>%
+  mutate(six_regions = recode(six_regions,
+                              "europe_central_asia" = "Europe and Central Asia",
+                              "america" = "America",
+                              "middle_east_north_africa" = "Middle East and North Africa",
+                              "sub_saharan_africa" = "Sub-Saharan Africa",
+                              "east_asia_pacific" = "East Asia and Pacific",
+                              "south_asia" = "South Asia")) %>% 
+  mutate(tooltip_label = paste(country, 
+                               round(change_in_consumption, 2), 
+                               sep = ": "))
+
+
 
 
 
@@ -78,35 +152,170 @@ setdiff(str_to_upper(seafood$geo), world_shape$shapeGroup)
 
 # HOME 
 
-## ROW 1 {height=10%}
+## ROW 1 {height=30%}
+
+### {width=20%}
 
 ```{r}
-plot(cars)
+value_box(
+  title = str_wrap(paste0("Lowest Seafood Consumption in 2018: ", seafood_consumption_min_2018$country), width = 30),
+  value = paste0(seafood_consumption_min_2018$consumption, " kg / Capita"),
+  showcase = bsicons::bs_icon("graph-down-arrow"),
+  theme = value_box_theme(bg = "#518fd6"))
+
+```
+
+### {width=20%}
+
+```{r}
+value_box(
+  title = str_wrap(paste0("Highest Seafood Consumption in 2018: ", seafood_consumption_max_2018$country), width = 30),
+  value = paste0(seafood_consumption_max_2018$consumption, " kg / Capita"),
+  showcase = bsicons::bs_icon("graph-up-arrow"),
+  theme = value_box_theme(bg = "#518fd6"))
+```
+
+### {width=40%}
+
+```{r}
+# Prepare data
+data <- seafood_consumption_regional_mean_2018 %>%
+  mutate(label = paste0(six_regions, ": ", round(mean_consumption, 3), " kg"))
+
+# Create plotly pie chart
+reg_mean_plot <- plot_ly(
+  data = data,
+  labels = ~six_regions,
+  values = ~round(mean_consumption, 3),
+  type = "pie",
+  textinfo = "label+percent",
+  hoverinfo = "label+value",
+  marker = list(colors = brewer.pal(6, "Set2"))
+) %>%
+  layout(title = "Regional Mean Seafood Consumption (2018)")
+
+reg_mean_plot
+
+
+```
+
+### {width=20%}
+
+```{r}
+
+seafood_consumption_regional_mean_2018_box <- seafood_consumption_regional_mean_2018 %>% 
+  arrange(desc(mean_consumption)) %>% 
+  slice_head(n = 1)
+
+value_box(
+  title = str_wrap(paste0("Highest Regional Seafood Consumption in 2018: ", seafood_consumption_regional_mean_2018_box$six_regions), width = 30),
+  value = paste0(round(seafood_consumption_regional_mean_2018_box$mean_consumption, 1), " kg / Capita"),
+  showcase = bsicons::bs_icon("star"),
+  theme = value_box_theme(bg = "#518fd6"))
+
+```
+
+## ROW 2 {height=70%}
+
+### {width=50%}
+
+```{r}
+colors <- brewer.pal(n = 6, name = "Set2")
+
+increase_plot <- ggplot(increase_in_seafood_consumption, aes(x = reorder(str_wrap(country, width = 20), -change_in_consumption),
+                                                             y = change_in_consumption,
+                                                             fill = six_regions,
+                                                             text = tooltip_label)) +
+  geom_col() + 
+  theme_minimal() +
+  labs(x = NULL, y = NULL, title = str_wrap("Increase in Seafood Consumption kg per Person per Year between 2017 and 2018", width = 40), fill = "Region") +
+  scale_fill_manual(values = setNames(colors, unique(increase_in_seafood_consumption$six_regions))) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplotly(increase_plot, tooltip = "text")
+
+```
+
+### {width=50%}
+
+```{r}
+decrease_plot <- ggplot(decrease_in_seafood_consumption, aes(x = reorder(str_wrap(country, width = 20), change_in_consumption),
+                                                             y = change_in_consumption,
+                                                             fill = six_regions,
+                                                             text = tooltip_label)) +
+  geom_col() + 
+  theme_minimal() +
+  labs(x = NULL, y = NULL, title = str_wrap("Decrease in Seafood Consumption kg per Person per Year between 2017 and 2018", width = 40), fill = "Region") +
+  scale_fill_manual(values = setNames(colors, unique(increase_in_seafood_consumption$six_regions))) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplotly(decrease_plot, tooltip = "text")
 ```
 
 
-## ROW 2 {height=30%}
+# WORLD MAP
 
 ```{r}
-plot(cars)
-```
+
+plot_geo(
+  data = seafood_world,
+  locationmode = "ISO-3"
+) %>% 
+  add_trace(
+    z = ~consumption,
+    zmin = min(seafood_world$consumption, na.rm = TRUE),
+    zmax = max(seafood_world$consumption, na.rm = TRUE),
+    locations = ~geo,
+    color = ~consumption,
+    frame = ~year
+  ) %>%
+  colorbar(title = "Seafood Consumption") %>%
+  layout(
+    title = "Seafood Consumption Over Time in kg per Capita per Year",
+    geo = list(
+      projection = list(type = "natural earth"), # Map projection
+      showland = TRUE, landcolor = "lightgray",
+      showocean = TRUE, oceancolor = "lightblue"
+    )
+  )
 
 
-## ROW 3 {height=60%}
 
-```{r}
-plot(cars)
+
 ```
 
 
 # DOWNLOAD DATA
 
+This dataset is sourced from the UN Food and Agriculture Organization (FAO) via OWID and  FAO, under its 'new methodology'of Food Balance Sheets; and the data are combined  into a complete series from 1961 to 2018.
+No transformations have been made to the original data both from OWID and FAO.
+Food supply is defined as food available for human consumption. At country level, it is calculated as the food remaining for human use after deduction of all non-food utilizations (i.e. food = production + imports + stock withdrawals − exports − industrial use − animal feed – seed – wastage − additions to stock). Wastage includes losses of usable products occurring along distribution chains from farm gate (or port of import) up to the retail level. However, such values do not include consumption-level waste (i.e. retail, restaurant and household waste) and therefore overestimates the average amount of food actually consumed. Gapmider imported data from FAO via OWID from 1961 to 2017 and FAO food balance for the year 2018 and data is presented only for countries/territories, regions  and global per year.
+
+The data can be downloaded either on this page or [here](https://gapm.io/dfisfod_cons).
+
+
+```{r}
+library(htmltools)
+
+htmltools::browsable(
+  tagList(
+    reactable(seafood, 
+              elementId = "seafood-table", 
+              searchable = T, 
+              filterable = T), 
+    
+tags$button("Download as CSV", 
+            onclick = "Reactable.downloadDataCSV('seafood-table')")
+  )
+)
+```
+
+
 
 # ABOUT
 
 
-
-
+Seafood consumption refers to the average availability of fish and seafood for human consumption, expressed in kilograms per person per year. This metric reflects the food supply remaining after accounting for non-food uses, such as exports, industrial applications, animal feed, and losses along the distribution chain, from production to retail. It includes a wide range of seafood types, such as fish, crustaceans, cephalopods, and mollusks. While the measure accounts for wastage during distribution, it excludes waste at the consumption level, such as household or restaurant waste, leading to a potential overestimation of actual consumption.
 
 
 
