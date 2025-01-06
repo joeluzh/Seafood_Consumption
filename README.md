@@ -15,7 +15,7 @@ This dataset is sourced from the UN Food and Agriculture Organization (FAO) via 
 - **Timeline:** Gapminder imported data from FAO via OWID from 1961 to 2017, and FAO food balance data for the year 2018. 
 - **Coverage:** Data is presented only for countries/territories, regions, and global per year.
 
-The data can be downloaded either on [this page](https://joeluzh.github.io/Seafood_Consumption) or [here](https://gapm.io/dfisfod_cons).
+The data can be downloaded either on [this page](https://joeluzh.github.io/Seafood_Consumption/#download-data) or [here](https://gapm.io/dfisfod_cons).
 
 ## GitHub Pages
 
